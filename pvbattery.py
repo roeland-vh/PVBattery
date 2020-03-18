@@ -396,8 +396,14 @@ def yearly_pv_production(df_flows):
 
 
 def monthly_pv_production(df_flows):
+    """ Calculates monthly pv production in kWh. """
     P_pv = df_flows['P PV']
-    #TODO
+    df = pd.DataFrame(data=P_pv.iteritems(), columns=['time', 'P PV'])
+    grouped_month = df.groupby(by=lambda i: df['time'][i].month)
+    agg_month = grouped_month.aggregate(np.mean)
+    mean_power_month = np.array(agg_month['P PV'])
+
+    return 24 * mean_power_month * np.array([31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31])
 
 
 if __name__ == '__main__':
@@ -422,7 +428,7 @@ if __name__ == '__main__':
         'price remuneration': 0.0,
         'prosumer tariff': 0,
         'investment': 0,
-        'O&M': lambda t: 12 * 2.6,  # replace inverter after 10 years for cost of €500
+        'O&M': lambda t: 12 * 2.6,
         'distribution tariff': 278.02,
         'transmission tariff': 54.49,
         'taxes & levies': 19.02,
