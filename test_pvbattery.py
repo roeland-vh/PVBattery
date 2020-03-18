@@ -1,6 +1,7 @@
 import unittest
 from pvbattery import *
 import matplotlib.pyplot as plt
+import itertools
 
 
 class TestPowerFlowsMethod(unittest.TestCase):
@@ -67,3 +68,49 @@ class TestPowerFlowsMethod(unittest.TestCase):
         plt.plot(monthly)
         plt.legend(['Monthly production GIS [kWh]', 'Monthly production ours [kWh]'])
         plt.show()
+
+
+class NetPresentValueTest(unittest.TestCase):
+    def setUp(self) -> None:
+        ghi = get_irradiance_data()
+        self.grid_flow = pd.Series(data=0, index=ghi.index)
+        self.price_parameters = {
+            'electricity price': 0,
+            'yearly electricity price increase': 0,
+            'price remuneration': 0.0,
+            'prosumer tariff': 0,
+            'investment': 0,
+            'O&M': lambda t: 0,
+            'distribution tariff': 0,
+            'transmission tariff': 0,
+            'taxes & levies': 0,
+            'salvage value': 0,
+        }
+
+    def test_net_present_value1(self):
+        npv = net_present_value(power_flow_grid=self.grid_flow, price_parameters=self.price_parameters,
+                                inverter_size=0, study_period=20, discount_rate=0.00, cf_other=lambda t: 0)
+        self.assertEqual(npv, 0)
+
+    def test_net_present_value2(self):
+        self.price_parameters['investment'] = 1000
+        npv = net_present_value(power_flow_grid=self.grid_flow, price_parameters=self.price_parameters,
+                                inverter_size=0, study_period=20, discount_rate=0.05, cf_other=lambda t: 0)
+        self.assertEqual(npv, -1000)
+
+    def test_net_present_value3(self):
+        prices = [1, 2]
+        powers = [10, 3]
+        periods = [10, 20]
+        rates = [0.01, 0.08]
+        price_increases = [0.01, 0.03]
+
+        for price, power, period, rate, price_increase in itertools.product(prices, powers, periods, rates, price_increases):
+            self.price_parameters['electricity price'] = price
+            self.price_parameters['yearly electricity price increase'] = price_increase
+            self.grid_flow = self.grid_flow.apply(lambda x: power)
+            npv = net_present_value(power_flow_grid=self.grid_flow, price_parameters=self.price_parameters,
+                                    inverter_size=0, study_period=period, discount_rate=rate, cf_other=lambda t: 0)
+
+            self.assertAlmostEqual(npv, float(np.sum([(365 * 24 * (-power) * price * (1 + price_increase)**(t-1)
+                                                       / (1 + rate)**t) for t in range(1, period + 1)])), places=3)
