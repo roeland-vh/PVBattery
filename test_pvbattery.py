@@ -1,5 +1,6 @@
 import unittest
 from pvbattery import *
+import matplotlib.pyplot as plt
 
 
 class TestPowerFlowsMethod(unittest.TestCase):
@@ -28,7 +29,6 @@ class TestPowerFlowsMethod(unittest.TestCase):
                                            geo_longitude=LONGITUDE)
             df_flows = self.power_flows_ideal(mod_irrads)
             E_pv = yearly_pv_production(df_flows)
-            print(E_pv)
             self.assertTrue((1 - self.REL_DEV) * (E_bm - var_bm) < E_pv < (1 + self.REL_DEV) * (E_bm + var_bm))
 
     def test_power_flows2(self):
@@ -41,7 +41,6 @@ class TestPowerFlowsMethod(unittest.TestCase):
                                            geo_longitude=LONGITUDE)
             df_flows = self.power_flows_ideal(mod_irrads)
             E_pv = yearly_pv_production(df_flows)
-            print(E_pv)
             self.assertTrue((1 - self.REL_DEV) * (E_bm - var_bm) < E_pv < (1 + self.REL_DEV) * (E_bm + var_bm))
 
     def test_power_flows3(self):
@@ -54,13 +53,17 @@ class TestPowerFlowsMethod(unittest.TestCase):
                                            geo_longitude=LONGITUDE)
             df_flows = self.power_flows_ideal(mod_irrads)
             E_pv = yearly_pv_production(df_flows)
-            print(E_pv)
             self.assertTrue((1 - self.REL_DEV) * (E_bm - var_bm) < E_pv < (1 + self.REL_DEV) * (E_bm + var_bm))
 
     def test_power_flows4(self):
         # monthly comparison for specific case, west facing module at 60° tilt
-        E_GIS = [18.85, 30.65, 63.85, 94.73, 107.31, 116.76, 116.22, 97.41, 76.71, 50.1, 22.74, 14.46]
+        E_GIS = np.array([18.85, 30.65, 63.85, 94.73, 107.31, 116.76, 116.22, 97.41, 76.71, 50.1, 22.74, 14.46])
         mod_irrads = module_irradiance(ghi_series=self.ghi, mod_tilt=60, mod_azi=270, geo_latitude=LATITUDE,
                                        geo_longitude=LONGITUDE)
         df_flows = self.power_flows_ideal(mod_irrads)
-        #TODO
+        monthly = monthly_pv_production(df_flows)
+
+        plt.plot(E_GIS)
+        plt.plot(monthly)
+        plt.legend(['Monthly production GIS [kWh]', 'Monthly production ours [kWh]'])
+        plt.show()
