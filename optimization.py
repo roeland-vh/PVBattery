@@ -8,36 +8,35 @@ class OptimizationCase(object):
         self._ghi = pvbattery.get_irradiance_data()
         self._load = pvbattery.get_load_data()
 
-        # TODO: fill in default values
         self.price_params = {
-            'electricity price': 0.05,
-            'yearly electricity price increase': 0,
-            'price remuneration': 0.05,
-            'prosumer tariff': 0,
-            'investment': 0,
-            'O&M': lambda t: 0,
-            'distribution tariff': 0,
-            'transmission tariff': 0,
-            'taxes & levies': 30,
-            'salvage value': 0,
+            'electricity price': 0.0753,                # fixed
+            'yearly electricity price increase': 0,     # fixed
+            'price remuneration': 0.0753,               # fixed, same as electricity price for net metering
+            'prosumer tariff': 85.49,                   # fixed
+            'investment': 0,                            # variable, correlation with A_pv in _set_investment
+            'O&M': lambda t: 0,                         # variable, replace inverter after 10 years, see _set_OM
+            'distribution tariff': 0.1085,              # fixed
+            'transmission tariff': 0.0217,              # fixed
+            'taxes & levies': 19.02,                    # fixed
+            'salvage value': 0,                         # fixed
         }
 
         self.system_params = {
-            'A_pv': 0,                  # total surface area of ALL pv modules, distributed evenly over orientations
-            'P_max_inv': 0,
+            'A_pv': 0,                                  # variable, total surface area of ALL pv modules, distributed evenly over orientations
+            'P_max_inv': 0,                             # variable, see _set_Pmax_inv
             'E_batt_max': 0,
             'P_max_batt_charge': 0,
             'P_max_batt_discharge': 0,
             'eta_batt_charge': 0.9,
             'eta_batt_discharge': 0.9,
-            'eta_pv': 0.20,
-            'eta_inv': 0.96,
+            'eta_pv': 0.16,                             # fixed
+            'eta_inv': 0.972,                           # fixed
         }
 
         self.misc_params = {
-            'study_period': 20,
-            'discount_rate': 0.05,
-            'cf_other': lambda t: 0     # other cash flows
+            'study_period': 20,                         # fixed
+            'discount_rate': 0.06,                      # fixed
+            'cf_other': lambda t: 0                     # fixed, other cash flows
         }
 
         # the tilts and azimuths of the different pv surface
@@ -67,28 +66,34 @@ class OptimizationCase(object):
 
     def _set_parameters(self, A):
         """ Set all the parameters that depend on the surface area. """
-        self._set_Apv(A)
-        self._set_investment(A)
-        self._set_Pmax_inv(A)
-
-    def _set_Apv(self, A):
         self.system_params['A_pv'] = A
+        self.price_params['investment'] = self._get_investment(A)
+        self.system_params['P_max_inv'] = self._get_Pmax_inv(A)
+        self.price_params['O&M'] = self._get_OM(A)
 
-    def _set_investment(self, A):
-        # around 300 euro for a 2m^2 panel. Around 250 euro for fixed cost inverter, around 100 euro per 0.5 kW for inverter.
-        self._set_Pmax_inv(A)
-        self.price_params['investment'] = 300 * A / 2 + 250 + 100 * self.system_params['P_max_inv'] / 0.5
+    def _get_investment(self, A):
+        # TODO: mounting and cabling cost, installation cost
+        # around €136.5 per m^2 of physical solar cell area
+        # assume installation cost of €1000
+        # cabling, mounting cost of around € 78 per m^2
+        return 136.5 * A + self._get_inv_cost(A) + 1000 + 78 * A
 
-    def _set_Pmax_inv(self, A):
-        # Inverter size in steps of 0.5 kW. 300W panel around 2m^2. Take inverter size equal to peak power, rounded above to nearest 0.5 kW
-        self.system_params['P_max_inv'] = 0.5 * np.ceil(A/2 * 0.3 / 0.5)
+    @staticmethod
+    def _get_Pmax_inv(A):
+        # Inverter size in steps of 0.5 kW. On average 0.16 kW per m^2.
+        # Take inverter size equal to sizing_factor * peak power, rounded above to nearest 0.5 kW
+        sizing_factor = 1.0
+        return 0.5 * np.ceil(sizing_factor * 0.16 * A / 0.5)
 
-    def _set_prosumer_tariff(self, A):
-        self._set_Pmax_inv(A)
-        self.price_params['prosumer tariff'] = 90 * self.system_params['P_max_inv']
+    def _get_inv_cost(self, A):
+        # Around 287 euro for fixed cost inverter, around 180 euro per kW for inverter.
+        return 287 + 180 * self._get_Pmax_inv(A)
+
+    def _get_OM(self, A):
+        """ Calculate O&M cost. Replace inverter after 10 years. """
+        return lambda t: (t == 10) * self._get_inv_cost(A)
 
     def optimize(self):
-        # TODO: write optimization algorithm here
         """
         *   To calculate net present values use the function defined in this class, not the one in pvbattery.py.
             This function keeps into account that we can have multiple orientations (e.g. gable roof east-west)
@@ -99,22 +104,45 @@ class OptimizationCase(object):
         *   This function should return nothing, it sets the parameters of the object to their optimal values found.
 
         """
-        n = 5
-        As = np.linspace(1, 20, n)
+        n = 10
+        As = np.linspace(1, 40, n)
         npvs = np.zeros((n,))
         for i, A in enumerate(As):
             self._set_parameters(A)
             npvs[i] = self.net_present_value()
 
-        plt.plot(As, npvs)
-        plt.show()
+        i = np.argmax(npvs)
+        self._set_parameters(As[i])
+
+        return As, npvs
+
+
+def run_optim():
+    case = OptimizationCase()
+    case.mod_azis = [90, 270]
+    case.mod_tilts = [10, 10]
+    As, npvs = case.optimize()
+    baseline = -5672 * np.ones_like(As)
+
+    f, ax = plt.subplots()
+    ax.plot(As, npvs, '+')
+    ax.plot(As, baseline)
+    ax.set_xlabel('PV surface area [m^2]')
+    ax.set_ylabel('NPV [€]')
+    plt.legend(['PV System', 'Baseline'])
+
+    plt.show()
+
+
+def run_params():
+    case = OptimizationCase()
+    case.mod_azis = [180]
+    case.mod_tilts = [35]
+    case._set_parameters(20)
+    print('PRICE PARAMETERS: {}'.format(case.price_params))
+    print()
+    print('SYSTEM PARAMETERS: {}'.format(case.system_params))
 
 
 if __name__ == '__main__':
-    # example
-    case = OptimizationCase()
-    case.mod_tilts = [0]
-    case.mod_azis = [180]
-    case.optimize()
-
-    print(case.system_params)
+    run_optim()
