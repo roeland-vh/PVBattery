@@ -272,8 +272,8 @@ def net_present_value(power_flow_grid, price_parameters, inverter_size, study_pe
         * prosumer tariff: yearly tariff to pay per kW of your inverter [€/kW]
         * investment: investment done in year 0 [€]
         * O&M: function giving the operation and maintenance cost in year t [€]
-        * distribution tariff: tariff to pay each year to the DS0 [€]
-        * transmission tariff: tariff to pay each year to the TSO [€]
+        * distribution tariff: tariff to pay each year to the DS0 [€/kWh]
+        * transmission tariff: tariff to pay each year to the TSO [€/kWh]
         * taxes & levies: taxes and levies to pay each year [€]
         * salvage value: salvage value at the end of the study period [€]
     :param inverter_size: size of the inverter [kW]
@@ -292,6 +292,7 @@ def net_present_value(power_flow_grid, price_parameters, inverter_size, study_pe
     # correct for incomplete data. we don't have 365 days of data.
     E_2grid *= 365 / (len(power_flow_grid) / (24 * 4))
     E_from_grid *= 365 / (len(power_flow_grid) / (24 * 4))
+    E_net_from_grid = E_from_grid - E_2grid
 
     """
     E_night = 0  # energy drawn from grid during night tariff
@@ -326,7 +327,7 @@ def net_present_value(power_flow_grid, price_parameters, inverter_size, study_pe
         ncf_t += -price_parameters['O&M'](t)
 
         # distribution and transmission tariffs
-        ncf_t += -price_parameters['distribution tariff'] - price_parameters['transmission tariff']
+        ncf_t += -E_net_from_grid * price_parameters['distribution tariff'] - E_net_from_grid * price_parameters['transmission tariff']
 
         # taxes and levies
         ncf_t += -price_parameters['taxes & levies']
@@ -424,6 +425,12 @@ if __name__ == '__main__':
 
     # visualize power flows
     df_flows.plot()
+    plt.legend(['Load [kW]',
+                'MI [kW/m2]',
+                'PV [kW]',
+                'Grid [kW]',
+                'Battery [kW]',
+                'Charge []'])
     plt.show()
 
 
