@@ -15,7 +15,7 @@ LATITUDE, LONGITUDE = 50.99461, 5.53972
 SOLAR_CONSTANT = 1361.5
 
 # solar altitude cut-off angle [degrees]
-SUN_ALT_CUTOFF = 10
+SUN_ALT_CUTOFF = 15
 
 # day tariff hours, varies from supplier to supplier. Usually night tariff is also applicable in the weekends.
 DAY_TARIFF_START = 7
@@ -196,7 +196,7 @@ def power_flows(mod_irrads, P_l, A_pv, P_max_inv, E_batt_max, P_max_batt_charge,
     if not isinstance(mod_irrads, list):
         mod_irrads = [mod_irrads]
 
-    df = pd.DataFrame(data=P_l.data.tolist(), index=P_l.index, columns=['load'])
+    df = pd.DataFrame(data=P_l.values, index=P_l.index, columns=['load'])
     for i, mi in enumerate(mod_irrads):
         df['mod irrad_{}'.format(i)] = mi
     # only keep datetimes for which both load and irradiance data is available
@@ -255,8 +255,6 @@ def plot_mean_load():
     plt.show()
 
 
-# TODO: validate
-# TODO: remuneration mechanism?
 def net_present_value(power_flow_grid, price_parameters, inverter_size, study_period, discount_rate,
                       cf_other=lambda _: 0):
     """
@@ -267,8 +265,7 @@ def net_present_value(power_flow_grid, price_parameters, inverter_size, study_pe
     :type power_flow_grid: pandas.Series
     :param price_parameters: dictionary with the following keys:
         * electricity price: price you pay for taking electricity from the grid [€/kWh] (single tariff)
-        * yearl electricity price increase: [%]
-        * price remuneration: price you get for putting electricity on the grid [€/kWh]
+        * yearly electricity price increase: [%]
         * prosumer tariff: yearly tariff to pay per kW of your inverter [€/kW]
         * investment: investment done in year 0 [€]
         * O&M: function giving the operation and maintenance cost in year t [€]
@@ -276,12 +273,16 @@ def net_present_value(power_flow_grid, price_parameters, inverter_size, study_pe
         * transmission tariff: tariff to pay each year to the TSO [€/kWh]
         * taxes & levies: taxes and levies to pay each year [€]
         * salvage value: salvage value at the end of the study period [€]
+        * capacity tariff: tariff to be paid for peak power capacity [€ / kWh]
     :param inverter_size: size of the inverter [kW]
     :param study_period: number of years over which to conduct the study [years]
     :param discount_rate: discount rate
     :param cf_other: function returning other cash flows in year t
     :return: calculated net present value
     """
+
+    # determine peak power for capacity tariff
+    capacity = np.max(np.abs(power_flow_grid))
 
     # energy put on the grid [kWh]
     E_2grid = -15 / 60 * np.sum(power_flow_grid[power_flow_grid < 0])
@@ -315,10 +316,7 @@ def net_present_value(power_flow_grid, price_parameters, inverter_size, study_pe
             ncf_t += price_parameters['salvage value']
 
         # energy component, taken from grid
-        ncf_t += -E_from_grid * price_parameters['electricity price'] * (1 + price_parameters['yearly electricity price increase']) ** (t - 1)
-
-        # energy component, put on the grid
-        ncf_t += E_2grid * price_parameters['price remuneration']
+        ncf_t += -max(0, E_net_from_grid * price_parameters['electricity price'] * (1 + price_parameters['yearly electricity price increase']) ** (t - 1))
 
         # prosumer tariff
         ncf_t += -price_parameters['prosumer tariff'] * inverter_size
@@ -327,7 +325,10 @@ def net_present_value(power_flow_grid, price_parameters, inverter_size, study_pe
         ncf_t += -price_parameters['O&M'](t)
 
         # distribution and transmission tariffs
-        ncf_t += -E_net_from_grid * price_parameters['distribution tariff'] - E_net_from_grid * price_parameters['transmission tariff']
+        ncf_t += -max(0, E_net_from_grid * (price_parameters['distribution tariff'] + price_parameters['transmission tariff']))
+
+        # capacity tariff
+        ncf_t += -price_parameters['capacity tariff'] * capacity
 
         # taxes and levies
         ncf_t += -price_parameters['taxes & levies']
@@ -432,25 +433,3 @@ if __name__ == '__main__':
                 'Battery [kW]',
                 'Charge []'])
     plt.show()
-
-
-    """
-    # net present value calculation
-    price_parameters = {
-        'electricity price': 0.0614+0.0247+0.0034,
-        'yearly electricity price increase': 0.012,
-        'price remuneration': 0.0,
-        'prosumer tariff': 0,
-        'investment': 0,
-        'O&M': lambda t: 12 * 2.6,
-        'distribution tariff': 278.02,
-        'transmission tariff': 54.49,
-        'taxes & levies': 19.02,
-        'salvage value': 0,
-    }
-
-    npv = net_present_value(power_flow_grid=df_flows['P grid'], price_parameters=price_parameters, inverter_size=0,
-                            study_period=20, discount_rate=0.07, cf_other=lambda t: -27.35)
-
-    print('\nNPV: €{}\n'.format(npv))
-    """
