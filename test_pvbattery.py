@@ -77,7 +77,6 @@ class NetPresentValueTest(unittest.TestCase):
         self.price_parameters = {
             'electricity price': 0,
             'yearly electricity price increase': 0,
-            'price remuneration': 0.0,
             'prosumer tariff': 0,
             'investment': 0,
             'O&M': lambda t: 0,
@@ -85,6 +84,7 @@ class NetPresentValueTest(unittest.TestCase):
             'transmission tariff': 0,
             'taxes & levies': 0,
             'salvage value': 0,
+            'capacity tariff': 0
         }
 
     def test_net_present_value1(self):
