@@ -16,7 +16,7 @@ class OptimizationCase(object):
             'prosumer tariff': 85.49,                           # 85.49 for prosumer tariff, 0 for capacity tariff
             'investment': 0,                                    # variable, correlation with A_pv in _set_investment
             'O&M': lambda t: 0,                                 # variable, replace inverter after 10 years, see _set_OM
-            'distribution tariff': 0.5*0.1085 + 0.0039251,      # fixed, when using capacity tariff, multiply first number with 0.5 !!! (zie Engie Direct Fixed 1 jaar prijzenfiche)
+            'distribution tariff': 0.1085 + 0.0039251,      # fixed, when using capacity tariff, multiply first number with 0.5 !!! (zie Engie Direct Fixed 1 jaar prijzenfiche)
             'transmission tariff': 0.0210,                      # fixed
             'taxes & levies': 19.02,                            # fixed
             'salvage value': 0,                                 # fixed
