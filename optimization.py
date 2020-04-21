@@ -49,10 +49,12 @@ class OptimizationCase(object):
     def set_prosumer_tariff(self):
         self.price_params['prosumer tariff'] = 85.49
         self.price_params['capacity tariff'] = 0
+        self.price_params['distribution tariff'] = 0.1085 + 0.0039251
 
     def set_capacity_tariff(self):
         self.price_params['prosumer tariff'] = 0
         self.price_params['capacity tariff'] = 33
+        self.price_params['distribution tariff'] = 0.5*0.1085 + 0.0039251
 
     def net_present_value(self):
         return pvbattery.net_present_value(self.power_flows()['P grid'],
@@ -178,7 +180,7 @@ def run_optim():
 
 def run_params():
     """ Run this function to print some parameters of a case you define. """
-    
+
     case = OptimizationCase()
     case.mod_azis = [180]
     case.mod_tilts = [35]
